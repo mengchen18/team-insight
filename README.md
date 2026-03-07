@@ -96,3 +96,7 @@ Embedding the generated JSONs into LanceDB does not depend on Claude Code and ca
 1. All team members share the `.claude/team-insight/json/` directory (via Git)
 2. Each member (or a CI/cron job) runs `ingest` to build their local LanceDB
 3. Claude Code searches the entire team's collective knowledge
+
+## Credits
+
+This project was inspired by and builds upon the concepts from [memory-lancedb-pro](https://github.com/win4r/memory-lancedb-pro).
