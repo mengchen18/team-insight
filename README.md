@@ -31,9 +31,9 @@ flowchart TD
     Claude[Claude Code]
     
     %% Storage
-    ProjectFiles[("Project Files\n(.py, .md)")]
-    SharedJSON[("Shared JSON Memory\n(.claude/team-insight/json/)")]
-    LanceDB[(Local LanceDB\n(.claude/team-insight/db/))]
+    ProjectFiles[("Project Files<br/>(.py, .md)")]
+    SharedJSON[("Shared JSON Memory<br/>(.claude/team-insight/json/)")]
+    LanceDB[("Local LanceDB<br/>(.claude/team-insight/db/)")]
     
     %% Operations
     User -- "/team-insight ingest" --> Claude
