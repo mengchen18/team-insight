@@ -1,0 +1,52 @@
+Bootstrap: docker
+From: condaforge/miniforge3:latest
+
+%labels
+    Author Chen Meng
+    Description Team-Insight shared memory system for Claude Code (AVX-optimised build)
+    Version 1.4.0
+
+%post
+    # Create mount points for external drives so --bind works on any path.
+    mkdir -p /media /mnt
+
+    # conda-forge provides pyarrow compiled for generic x86_64 (no AVX required).
+    conda install -y -c conda-forge \
+        python=3.11 \
+        pyarrow \
+        pyyaml \
+        pip
+
+    # Use pre-built PyPI wheels for lancedb/pylance.
+    # These wheels are compiled with AVX2/AVX-512 and require a modern x86-64 CPU.
+    pip install --no-cache-dir \
+        'lancedb>=0.6' \
+        'pydantic>=2.0' \
+        'openai>=1.0' \
+        google-genai \
+        cohere \
+        voyageai
+
+    # Cleanup conda cache.
+    conda clean -afy
+
+%environment
+    export PYTHONUNBUFFERED=1
+    export LC_ALL=C.UTF-8
+    export LANG=C.UTF-8
+
+%runscript
+    python "$@"
+
+%help
+    Team-Insight SIF container for Claude Code shared memory (AVX-optimised).
+    Requires a modern x86-64 CPU with AVX2 or AVX-512 support.
+    Uses pre-built PyPI wheels for lancedb/pylance — fast build, latest versions.
+
+    Usage:
+      apptainer exec team-insight-avx.sif python <scripts_dir>/cli.py <subcommand> [args]
+
+    Subcommands:
+      search   - Query the LanceDB memory
+      remember - Save an insight to memory
+      ingest   - Embed JSON files into LanceDB

@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Apptainer / Singularity
+*.sif
+*.simg
+
+# User Data / Settings
+.claude/
+
+# Ignore local config if it contains secrets
+setting.json
