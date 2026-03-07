@@ -43,9 +43,7 @@ flowchart TD
     Claude -- "2. remember (CLI)" --> SharedJSON
     Claude -- "3. ingest (CLI)" --> SharedJSON
     
-    SharedJSON -- "Git Push / Pull" --> SharedJSON
-    
-    Claude -- "4. embed (CLI)" ---> LanceDB
+    SharedJSON -- "4. embed (nightly cron)" ---> LanceDB
     
     Claude -- "1. search (CLI)" ---> LanceDB
     LanceDB -. "Context" .-> Claude
