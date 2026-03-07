@@ -19,6 +19,49 @@ A skill-driven shared memory system for Claude Code that enables multi-user, pro
 └── db/                          ← LanceDB vector database
 ```
 
+## How It Works (The Workflow)
+
+Team-Insight operates on a simple 2-step lifecycle: **Generate JSON** -> **Embed JSON**. 
+Because the JSON files act as an intermediate state, they can be safely committed to Git and shared seamlessly with your team without causing binary database conflicts.
+
+```mermaid
+flowchart TD
+    %% Actors
+    User([User])
+    Claude[Claude Code]
+    
+    %% Storage
+    ProjectFiles[("Project Files\n(.py, .md)")]
+    SharedJSON[("Shared JSON Memory\n(.claude/team-insight/json/)")]
+    LanceDB[(Local LanceDB\n(.claude/team-insight/db/))]
+    
+    %% Operations
+    User -- "/team-insight ingest" --> Claude
+    User -- "remember this..." --> Claude
+    
+    Claude -- "Reads Code" ----> ProjectFiles
+    Claude -- "2. remember (CLI)" --> SharedJSON
+    Claude -- "3. ingest (CLI)" --> SharedJSON
+    
+    SharedJSON -- "Git Push / Pull" --> SharedJSON
+    
+    Claude -- "4. embed (CLI)" ---> LanceDB
+    
+    Claude -- "1. search (CLI)" ---> LanceDB
+    LanceDB -. "Context" .-> Claude
+    Claude -. "Answers" .-> User
+
+    classDef db fill:#f9f,stroke:#333,stroke-width:2px;
+    class LanceDB,SharedJSON,ProjectFiles db;
+```
+
+### The 4 Core Modules
+
+1. **Search**: Claude queries your local LanceDB when it lacks context.
+2. **Remember**: Claude extracts facts/decisions from your conversation and saves them as `.json` files.
+3. **Ingest**: Claude reads raw project files and digests them into semantic `.json` summaries.
+4. **Embed**: A Python script reads all `.json` files and syncs them into the local LanceDB for lightning-fast retrieval.
+
 ## Setup
 
 ### 1. Build the SIF container
