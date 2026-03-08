@@ -60,6 +60,16 @@ flowchart TD
 3. **Ingest**: Claude reads raw project files and digests them into semantic `.json` summaries.
 4. **Embed**: A Python script reads all `.json` files and syncs them into the local LanceDB for lightning-fast retrieval.
 
+## Advanced Memory Retrieval
+
+Team-Insight implements a highly optimized **Hybrid Search Pipeline** to ensure Claude Code always retrieves the most relevant context, minimizing hallucinations and token waste:
+
+1. **Hybrid Search (Vector + BM25 keyword)**: It doesn't just rely on semantic embeddings. It simultaneously performs a BM25 exact-keyword search. Results found in *both* are boosted via **Reciprocal Rank Fusion (RRF)**.
+2. **Length Normalization**: Very long text chunks are slightly penalized to prevent them from dominating the search results.
+3. **Time Decay factor**: Older memories gradually decay in relevance compared to newer insights, ensuring Claude prioritizes the latest codebase decisions. 
+4. **Maximal Marginal Relevance (MMR)**: Before returning results to Claude, it uses MMR to brutally filter out near-duplicate chunks, ensuring maximum *diversity* in the provided context window.
+5. **Metadata Filtering**: Searches can be strictly filtered by `file_type` (e.g., only Python files) or by `author`, making targeted queries extremely precise.
+
 ## Setup
 
 ### 1. Build the SIF container
