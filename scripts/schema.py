@@ -48,6 +48,8 @@ class MemoryDocument(BaseModel):
     chunks: List[Chunk]
     relations: Optional[Relations] = Field(default_factory=Relations)
 
+    model_config = {"extra": "allow"}
+
 
 def compose_embed_text(chunk: Chunk) -> str:
     """

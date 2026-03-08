@@ -2,6 +2,10 @@
 Helper script for Phase 1 Smart Ingestion.
 Runs before Claude Code reads a file to check if it's already in memory.
 For binary/presentation files, it extracts slides and diffs hashes.
+
+Subcommands:
+  diff   - Check if a file needs re-ingestion (SKIP / READ_PARTIAL / READ_ENTIRE_FILE)
+  stamp  - Post-ingestion: write raw content hashes into the JSON for future diffs
 """
 
 import argparse
@@ -9,14 +13,107 @@ import hashlib
 import json
 import os
 import sys
-from pathlib import Path
-from typing import Optional
+from datetime import datetime, timezone
+from typing import Dict, Optional
 
+
+# ---------------------------------------------------------------------------
+# Hashing helpers
+# ---------------------------------------------------------------------------
 
 def compute_chunk_hash(text: str) -> str:
-    """Compute SHA-256 hash for chunk content. Must match utils.py"""
+    """Compute SHA-256 hash for chunk content. Must match utils.py."""
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
+
+def compute_file_hash(file_path: str) -> str:
+    """Compute SHA-256 hash of a file's binary contents. Must match utils.py."""
+    h = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# PPTX text extraction
+# ---------------------------------------------------------------------------
+
+def _extract_shape_content(shape) -> list:
+    """Extract text and binary fingerprints from a single shape (recursive for groups)."""
+    parts = []
+
+    # Grouped shapes: recurse into children
+    if shape.shape_type is not None and shape.shape_type == 6:  # MSO_SHAPE_TYPE.GROUP
+        for child in shape.shapes:
+            parts.extend(_extract_shape_content(child))
+        return parts
+
+    # Tables: extract cell text row by row
+    if shape.has_table:
+        for row in shape.table.rows:
+            row_text = " | ".join(
+                cell.text.strip() for cell in row.cells if cell.text.strip()
+            )
+            if row_text:
+                parts.append(row_text)
+        return parts
+
+    # Images: hash the raw blob bytes
+    try:
+        if hasattr(shape, "image") and shape.image is not None:
+            blob_hash = hashlib.sha256(shape.image.blob).hexdigest()
+            parts.append(f"[image:{blob_hash}]")
+    except Exception:
+        pass
+
+    # Charts: hash the underlying chart XML data
+    if shape.has_chart:
+        try:
+            chart_xml = shape.chart._chartSpace.xml
+            chart_hash = hashlib.sha256(chart_xml.encode("utf-8")).hexdigest()
+            parts.append(f"[chart:{chart_hash}]")
+        except Exception:
+            pass
+
+    # Text (regular shapes, text boxes, placeholders)
+    if hasattr(shape, "text") and shape.text:
+        parts.append(shape.text.strip())
+
+    return parts
+
+
+def extract_slide_fingerprints(pptx_path: str) -> Dict[str, str]:
+    """Extract a content fingerprint per slide.
+
+    Returns {slide_number_str: fingerprint_string}.
+    The fingerprint combines text, image hashes, chart hashes, and speaker
+    notes so that ANY content change (text, image swap, chart update) is
+    detected by a simple string hash comparison.
+    """
+    from pptx import Presentation
+    prs = Presentation(pptx_path)
+    slides = {}
+    for i, slide in enumerate(prs.slides):
+        parts = []
+        for shape in slide.shapes:
+            parts.extend(_extract_shape_content(shape))
+
+        # Speaker notes
+        if slide.has_notes_slide:
+            notes_text = slide.notes_slide.notes_text_frame.text.strip()
+            if notes_text:
+                parts.append(f"[notes:{notes_text}]")
+
+        content = "\n".join(parts).strip()
+        if content:
+            slides[str(i + 1)] = content
+    return slides
+
+
+# ---------------------------------------------------------------------------
+# JSON lookup
+# ---------------------------------------------------------------------------
 
 def get_existing_json_path(target_file: str, json_dir: str) -> Optional[str]:
     """Find the existing parsed JSON for this file."""
@@ -24,8 +121,8 @@ def get_existing_json_path(target_file: str, json_dir: str) -> Optional[str]:
     json_path = os.path.join(json_dir, "file", f"{base_name}.json")
     if os.path.exists(json_path):
         return json_path
-    
-    # Try searching for a match if the name convention changed slightly
+
+    # Fallback: scan by source.file_path (handles renamed JSON files)
     file_dir = os.path.join(json_dir, "file")
     if os.path.exists(file_dir):
         for f in os.listdir(file_dir):
@@ -34,12 +131,18 @@ def get_existing_json_path(target_file: str, json_dir: str) -> Optional[str]:
                 try:
                     with open(path, "r") as jf:
                         data = json.load(jf)
-                        if data.get("source", {}).get("file_path") == target_file:
+                        stored = data.get("source", {}).get("file_path", "")
+                        # Compare basenames to handle different absolute paths
+                        if os.path.basename(stored) == base_name:
                             return path
                 except Exception:
                     pass
     return None
 
+
+# ---------------------------------------------------------------------------
+# diff subcommand
+# ---------------------------------------------------------------------------
 
 def cmd_diff(args):
     target_file = os.path.abspath(args.file)
@@ -49,17 +152,16 @@ def cmd_diff(args):
         print(json.dumps({"error": f"File not found: {target_file}"}))
         sys.exit(1)
 
-    # 1. Check if we have an existing JSON memory
+    # 1. Look up existing JSON memory
     json_path = get_existing_json_path(target_file, json_dir)
     if not json_path:
         print(json.dumps({
             "status": "new",
-            "reason": "No existing JSON memory found.",
-            "action": "READ_ENTIRE_FILE"
+            "action": "READ_ENTIRE_FILE",
+            "reason": "No existing JSON memory found."
         }, indent=2))
         return
 
-    # 2. Check File-Level Modification Time
     try:
         with open(json_path, "r") as f:
             existing_data = json.load(f)
@@ -67,148 +169,228 @@ def cmd_diff(args):
         print(json.dumps({"error": f"Failed to read JSON: {e}"}))
         sys.exit(1)
 
-    actual_mtime_ts = os.path.getmtime(target_file)
-    # Convert to ISO format matching our schema
-    from datetime import datetime, timezone
-    actual_mtime = datetime.fromtimestamp(actual_mtime_ts, tz=timezone.utc).isoformat()
-    
-    # Simple string comparison (assumes both are standard ISO format)
-    # In practice, comparing timestamps robustly is better done via parsing
-    memory_mtime = existing_data.get("source", {}).get("last_modified")
+    # 2. File-level skip — prefer content hash, fall back to mtime
+    stored_hash = existing_data.get("source", {}).get("hash")
+    if stored_hash:
+        current_hash = compute_file_hash(target_file)
+        if current_hash == stored_hash:
+            print(json.dumps({
+                "status": "unchanged",
+                "action": "SKIP",
+                "reason": "File content hash unchanged."
+            }, indent=2))
+            return
+    else:
+        # mtime fallback (less reliable but better than nothing)
+        memory_mtime = existing_data.get("source", {}).get("last_modified")
+        if memory_mtime:
+            try:
+                mem_dt = datetime.fromisoformat(memory_mtime.replace("Z", "+00:00"))
+                act_ts = os.path.getmtime(target_file)
+                act_dt = datetime.fromtimestamp(act_ts, tz=timezone.utc)
+                if act_dt <= mem_dt:
+                    print(json.dumps({
+                        "status": "unchanged",
+                        "action": "SKIP",
+                        "reason": f"File not modified since {memory_mtime} (mtime check)."
+                    }, indent=2))
+                    return
+            except Exception:
+                pass  # fall through to content check
 
-    # If the file hasn't been modified on disk since the JSON was created
-    # We can perform a fast-skip
-    if memory_mtime:
-        try:
-            mem_dt = datetime.fromisoformat(memory_mtime.replace('Z', '+00:00'))
-            act_dt = datetime.fromisoformat(actual_mtime.replace('Z', '+00:00'))
-            if act_dt <= mem_dt:
-                print(json.dumps({
-                    "status": "unchanged",
-                    "reason": f"File not modified since {memory_mtime}.",
-                    "action": "SKIP"
-                }, indent=2))
-                return
-        except Exception:
-            pass
-
-    # 3. File is modified. Can we do chunk-level diffing?
+    # 3. File is modified — attempt slide-level diff for PPTX
     ext = os.path.splitext(target_file)[1].lower()
-    
+
     if ext == ".pptx":
         try:
-            from pptx import Presentation
+            from pptx import Presentation  # noqa: F401
         except ImportError:
             print(json.dumps({
                 "status": "modified",
-                "reason": "File modified. python-pptx not installed for granular diff.",
-                "action": "READ_ENTIRE_FILE"
+                "action": "READ_ENTIRE_FILE",
+                "reason": "python-pptx not installed for granular diff."
             }, indent=2))
             return
-            
-        # Parse existing chunks to build a map
-        old_chunks = {}
-        for c in existing_data.get("chunks", []):
-            cid = c.get("chunk_id")
-            old_chunks[cid] = c
 
-        try:
-            prs = Presentation(target_file)
-            changed_slides = []
-            
-            # Extract text and hash per slide
-            for i, slide in enumerate(prs.slides):
-                slide_num = i + 1
-                chunk_id = f"slide_{slide_num}"
-                
-                # Simple text extraction from shapes
-                text_runs = []
-                for shape in slide.shapes:
-                    if hasattr(shape, "text") and shape.text:
-                        text_runs.append(shape.text.strip())
-                slide_content = "\\n".join(text_runs).strip()
-                
-                # We skip completely empty slides
-                if not slide_content:
-                    continue
-                    
-                new_hash = compute_chunk_hash(slide_content)
-                old_chunk = old_chunks.get(chunk_id)
-                
-                # Check if slide changed or is new
-                if not old_chunk or old_chunk.get("chunk_hash") != new_hash:
-                    changed_slides.append({
-                        "chunk_id": chunk_id,
-                        "slide_number": slide_num,
-                        "content_preview": slide_content[:200]
-                    })
-            
-            if not changed_slides:
-                 # It's possible the file was modified without text changes (e.g., formatting/metadata)
-                 print(json.dumps({
-                     "status": "unchanged",
-                     "reason": "PPTX file has newer timestamp, but text content hashes are identical.",
-                     "action": "SKIP"
-                 }, indent=2))
-                 return
-
-            # Assemble surrounding context for the changed slides
-            requested_chunks = []
-            context_chunks = []
-            
-            # To minimize tokens, we just grab adjacent context from old memory
-            for cs in changed_slides:
-                requested_chunks.append(cs["chunk_id"])
-                
-                curr_slide_num = int(cs['slide_number'])
-                prev_id = f"slide_{curr_slide_num - 1}"
-                next_id = f"slide_{curr_slide_num + 1}"
-                
-                if prev_id in old_chunks and prev_id not in requested_chunks:
-                    context_chunks.append({
-                        "chunk_id": prev_id,
-                        "summary": str(old_chunks[prev_id].get("content", ""))[:300] + "..."
-                    })
-                if next_id in old_chunks and next_id not in requested_chunks:
-                    context_chunks.append({
-                        "chunk_id": next_id,
-                        "summary": str(old_chunks[next_id].get("content", ""))[:300] + "..."
-                    })
-
+        old_slide_hashes = existing_data.get("_slide_hashes", {})
+        if not old_slide_hashes:
+            # No stamp data — cannot do granular diff
             print(json.dumps({
                 "status": "modified",
-                "reason": f"Found {len(changed_slides)} modified slides.",
-                "action": "READ_PARTIAL",
-                "chunks_to_process": requested_chunks,
-                "context": context_chunks
+                "action": "READ_ENTIRE_FILE",
+                "reason": "No _slide_hashes in JSON (run stamp after first ingestion)."
             }, indent=2))
             return
-            
-        except Exception as e:
-             print(json.dumps({
-                "status": "modified",
-                "reason": f"Error parsing PPTX: {e}",
-                "action": "READ_ENTIRE_FILE"
-            }, indent=2))
-             return
 
-    # Fallback for text files (code, md, etc) where semantic chunking is done by LLM
+        try:
+            current_slides = extract_slide_fingerprints(target_file)
+        except Exception as e:
+            print(json.dumps({
+                "status": "modified",
+                "action": "READ_ENTIRE_FILE",
+                "reason": f"Error parsing PPTX: {e}"
+            }, indent=2))
+            return
+
+        # Hash current slides
+        current_hashes = {k: compute_chunk_hash(v) for k, v in current_slides.items()}
+
+        # Set-based diff
+        old_keys = set(old_slide_hashes.keys())
+        new_keys = set(current_hashes.keys())
+
+        changed = sorted(
+            [s for s in old_keys & new_keys if current_hashes[s] != old_slide_hashes[s]],
+            key=int,
+        )
+        added = sorted(new_keys - old_keys, key=int)
+        deleted = sorted(old_keys - new_keys, key=int)
+
+        if not changed and not added and not deleted:
+            print(json.dumps({
+                "status": "unchanged",
+                "action": "SKIP",
+                "reason": "Binary differs but slide text hashes are identical (formatting-only change)."
+            }, indent=2))
+            return
+
+        # Build context from existing chunks for the affected slides
+        affected = set(int(s) for s in changed + added)
+        context_summaries = []
+        seen_context = set()
+
+        for slide_num in sorted(affected):
+            for neighbor in [slide_num - 1, slide_num + 1]:
+                nkey = str(neighbor)
+                if nkey not in old_slide_hashes:
+                    continue
+                if neighbor in affected or nkey in seen_context:
+                    continue
+                seen_context.add(nkey)
+                # Find any chunk that mentions this slide
+                for c in existing_data.get("chunks", []):
+                    content = c.get("content", "")
+                    if content:
+                        preview = content[:300]
+                        if len(content) > 300:
+                            preview += "..."
+                        context_summaries.append({
+                            "near_slide": neighbor,
+                            "chunk_id": c.get("chunk_id"),
+                            "summary": preview,
+                        })
+                        break
+
+        result = {
+            "status": "modified",
+            "action": "READ_PARTIAL",
+            "reason": (
+                f"{len(changed)} changed, {len(added)} added, "
+                f"{len(deleted)} deleted slides."
+            ),
+            "changed_slides": [int(s) for s in changed],
+            "added_slides": [int(s) for s in added],
+            "deleted_slides": [int(s) for s in deleted],
+        }
+        if context_summaries:
+            result["context"] = context_summaries
+
+        print(json.dumps(result, indent=2))
+        return
+
+    # Fallback for non-PPTX files
     print(json.dumps({
         "status": "modified",
-        "reason": "File modified. Granular text diffing not supported.",
-        "action": "READ_ENTIRE_FILE"
+        "action": "READ_ENTIRE_FILE",
+        "reason": "File modified. Granular diffing not supported for this file type."
     }, indent=2))
 
+
+# ---------------------------------------------------------------------------
+# stamp subcommand
+# ---------------------------------------------------------------------------
+
+def cmd_stamp(args):
+    """Post-ingestion: write raw slide hashes + file hash into the JSON."""
+    target_file = os.path.abspath(args.file)
+    json_dir = os.path.abspath(args.json_dir)
+
+    json_path = get_existing_json_path(target_file, json_dir)
+    if not json_path:
+        print(json.dumps({"error": "No JSON found to stamp."}))
+        sys.exit(1)
+
+    try:
+        with open(json_path, "r") as f:
+            data = json.load(f)
+    except Exception as e:
+        print(json.dumps({"error": f"Failed to read JSON: {e}"}))
+        sys.exit(1)
+
+    # Always stamp file content hash
+    data.setdefault("source", {})["hash"] = compute_file_hash(target_file)
+
+    # Update mtime
+    mtime = os.path.getmtime(target_file)
+    data["source"]["last_modified"] = datetime.fromtimestamp(
+        mtime, tz=timezone.utc
+    ).isoformat()
+
+    # Slide-level hashes for PPTX
+    ext = os.path.splitext(target_file)[1].lower()
+    if ext == ".pptx":
+        try:
+            slide_texts = extract_slide_fingerprints(target_file)
+            data["_slide_hashes"] = {
+                k: compute_chunk_hash(v) for k, v in slide_texts.items()
+            }
+        except Exception as e:
+            print(json.dumps({
+                "warning": f"Could not extract slide hashes: {e}",
+                "path": json_path,
+            }))
+            # Still save the file hash
+
+    with open(json_path, "w") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+    print(json.dumps({
+        "status": "stamped",
+        "path": json_path,
+        "file_hash": data["source"]["hash"],
+        "slide_hashes": len(data.get("_slide_hashes", {})),
+    }, indent=2))
+
+
+# ---------------------------------------------------------------------------
+# CLI entry point
+# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Ingestion preprocessing helper.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    diff_parser = subparsers.add_parser("diff")
+    diff_parser = subparsers.add_parser(
+        "diff", help="Check if a file needs re-ingestion"
+    )
     diff_parser.add_argument("file", help="Path to the target project file")
-    diff_parser.add_argument("--json-dir", required=True, help="Path to .claude/team-insight/json")
-    
+    diff_parser.add_argument(
+        "--json-dir", required=True,
+        help="Path to .claude/team-insight/json"
+    )
+
+    stamp_parser = subparsers.add_parser(
+        "stamp", help="Write raw content hashes into the JSON after ingestion"
+    )
+    stamp_parser.add_argument("file", help="Path to the target project file")
+    stamp_parser.add_argument(
+        "--json-dir", required=True,
+        help="Path to .claude/team-insight/json"
+    )
+
     args = parser.parse_args()
-    
+
     if args.command == "diff":
         cmd_diff(args)
+    elif args.command == "stamp":
+        cmd_stamp(args)
