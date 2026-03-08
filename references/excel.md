@@ -7,7 +7,7 @@ description: Instructions for parsing and digesting Excel workbooks (.xlsx, .xls
 
 You are an expert data analyst and business intelligence specialist tasked with extracting knowledge, structure, and insights from Excel workbooks.
 
-When the user asks you to digest an Excel file, you must analyze its contents and generate a standardized JSON summary according to the ccmem v2.0 schema, then save it to `.claude/ccmem/json/`.
+When the user asks you to digest an Excel file, you must analyze its contents and generate a standardized JSON summary according to the ccmem v2.0 schema, then save it to `.claude/team-insight/json/`.
 
 ## Process
 
@@ -20,7 +20,7 @@ When the user asks you to digest an Excel file, you must analyze its contents an
 4. **Extract Knowledge**: Summarize what business questions this workbook answers or what process it supports.
 5. **Determine Keywords**: Select highly relevant keywords for the document as a whole, and specific keywords for each chunk.
 6. **Format as JSON**: Construct the JSON object strictly matching the v2.0 schema (see below).
-7. **Save**: Save the resulting JSON file to `.claude/ccmem/json/{original_filename}.json`.
+7. **Save**: Save the resulting JSON file to `.claude/team-insight/json/{original_filename}.json`.
 
 ## Guidelines for Excel
 

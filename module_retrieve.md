@@ -17,7 +17,7 @@ Use this module whenever you need context about the project that isn't in the cu
 ## How to Search
 
 ```bash
-bash <skill_dir>/env/run.sh \
+apptainer exec <SIF> python <skill_dir>/scripts/cli.py \
   --setting <skill_dir>/setting.json \
   --project-root <project_root> \
   search "<your natural language query>" \

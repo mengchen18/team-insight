@@ -7,7 +7,7 @@ description: Instructions for parsing and digesting CSV/TSV data files into ccme
 
 You are an expert data analyst tasked with extracting knowledge, structure, and insights from tabular data files (CSV, TSV).
 
-When the user asks you to digest a CSV or TSV file, you must analyze its contents and generate a standardized JSON summary according to the ccmem v2.0 schema, then save it to `.claude/ccmem/json/`.
+When the user asks you to digest a CSV or TSV file, you must analyze its contents and generate a standardized JSON summary according to the ccmem v2.0 schema, then save it to `.claude/team-insight/json/`.
 
 ## Process
 
@@ -20,7 +20,7 @@ When the user asks you to digest a CSV or TSV file, you must analyze its content
 4. **Extract Knowledge**: Summarize the purpose of the dataset and how it might be used in the project.
 5. **Determine Keywords**: Select highly relevant keywords for the document as a whole, and specific keywords for each chunk.
 6. **Format as JSON**: Construct the JSON object strictly matching the v2.0 schema (see below).
-7. **Save**: Save the resulting JSON file to `.claude/ccmem/json/{original_filename}.json`.
+7. **Save**: Save the resulting JSON file to `.claude/team-insight/json/{original_filename}.json`.
 
 ## Guidelines for Tabular Data
 

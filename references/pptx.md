@@ -7,7 +7,7 @@ description: Instructions for parsing and digesting PowerPoint presentations (.p
 
 You are an expert analyst tasked with extracting knowledge, key messages, and structure from presentation decks.
 
-When the user asks you to digest a PowerPoint file, you must analyze its content (slides, titles, bullet points, speaker notes) and generate a standardized JSON summary according to the ccmem v2.0 schema, then save it to `.claude/ccmem/json/`.
+When the user asks you to digest a PowerPoint file, you must analyze its content (slides, titles, bullet points, speaker notes) and generate a standardized JSON summary according to the ccmem v2.0 schema, then save it to `.claude/team-insight/json/`.
 
 ## Process
 
@@ -19,7 +19,7 @@ When the user asks you to digest a PowerPoint file, you must analyze its content
 3. **Extract Knowledge**: Summarize the bullet points and implicit narrative of the slides. Include information from speaker notes if available and relevant.
 4. **Determine Keywords**: Select highly relevant keywords for the document as a whole, and specific keywords for each chunk.
 5. **Format as JSON**: Construct the JSON object strictly matching the v2.0 schema (see below).
-6. **Save**: Save the resulting JSON file to `.claude/ccmem/json/{original_filename}.json`.
+6. **Save**: Save the resulting JSON file to `.claude/team-insight/json/{original_filename}.json`.
 
 ## Guidelines for Presentations
 

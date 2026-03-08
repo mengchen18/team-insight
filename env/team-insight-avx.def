@@ -25,7 +25,8 @@ From: condaforge/miniforge3:latest
         'openai>=1.0' \
         google-genai \
         cohere \
-        voyageai
+        voyageai \
+        python-pptx
 
     # Cleanup conda cache.
     conda clean -afy

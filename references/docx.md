@@ -7,7 +7,7 @@ description: Instructions for parsing and digesting Word documents (.docx, .doc)
 
 You are an expert analyst tasked with extracting knowledge, key points, and structure from text-heavy Word documents.
 
-When the user asks you to digest a Word document, you must analyze its text and generate a standardized JSON summary according to the ccmem v2.0 schema, then save it to `.claude/ccmem/json/`.
+When the user asks you to digest a Word document, you must analyze its text and generate a standardized JSON summary according to the ccmem v2.0 schema, then save it to `.claude/team-insight/json/`.
 
 ## Process
 
@@ -19,7 +19,7 @@ When the user asks you to digest a Word document, you must analyze its text and 
 3. **Extract Knowledge**: Summarize the content of each chunk clearly and concisely. Avoid simply repeating the text word-for-word; synthesize the meaning.
 4. **Determine Keywords**: Select highly relevant keywords for the document as a whole, and specific keywords for each chunk. Include names of projects, people, or specific technologies mentioned.
 5. **Format as JSON**: Construct the JSON object strictly matching the v2.0 schema (see below).
-6. **Save**: Save the resulting JSON file to `.claude/ccmem/json/{original_filename}.json`.
+6. **Save**: Save the resulting JSON file to `.claude/team-insight/json/{original_filename}.json`.
 
 ## Guidelines for Word Documents
 

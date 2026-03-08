@@ -7,7 +7,7 @@ description: Instructions for parsing and digesting R Data files (.rds, .rdata) 
 
 You are an expert data scientist tasked with extracting knowledge and structural metadata from serialized R data objects (`.rds` or `.RData` files).
 
-When the user asks you to digest an R data file, you must determine its general structure (often by asking the user to run `str()` or using an R execution tool, or if the user has provided a summary) and generate a standardized JSON summary according to the ccmem v2.0 schema, then save it to `.claude/ccmem/json/`.
+When the user asks you to digest an R data file, you must determine its general structure (often by asking the user to run `str()` or using an R execution tool, or if the user has provided a summary) and generate a standardized JSON summary according to the ccmem v2.0 schema, then save it to `.claude/team-insight/json/`.
 
 ## Process
 
@@ -19,7 +19,7 @@ When the user asks you to digest an R data file, you must determine its general 
 3. **Extract Knowledge**: Summarize what this data represents and how it should be used in the context of the larger project.
 4. **Determine Keywords**: Select highly relevant keywords for the document as a whole, and specific keywords for each chunk.
 5. **Format as JSON**: Construct the JSON object strictly matching the v2.0 schema (see below).
-6. **Save**: Save the resulting JSON file to `.claude/ccmem/json/{original_filename}.json`.
+6. **Save**: Save the resulting JSON file to `.claude/team-insight/json/{original_filename}.json`.
 
 ## Guidelines for R Data
 

@@ -7,7 +7,7 @@ description: Instructions for parsing and digesting Python scripts into ccmem JS
 
 You are an expert at analyzing Python code and extracting long-term knowledge, architectural decisions, and reusable components.
 
-When the user asks you to digest a Python file (`.py`), you must analyze its contents and generate a standardized JSON summary according to the ccmem v2.0 schema, then save it to `.claude/ccmem/json/`.
+When the user asks you to digest a Python file (`.py`), you must analyze its contents and generate a standardized JSON summary according to the ccmem v2.0 schema, then save it to `.claude/team-insight/json/`.
 
 ## Process
 
@@ -20,7 +20,7 @@ When the user asks you to digest a Python file (`.py`), you must analyze its con
 3. **Extract Knowledge**: For each chunk, extract the core logic, parameters, return types, and any noticeable "gotchas", hacks, or important decisions.
 4. **Determine Keywords**: Select 3-8 highly relevant keywords for the document as a whole, and 2-5 specific keywords for each chunk.
 5. **Format as JSON**: Construct the JSON object strictly matching the v2.0 schema (see below).
-6. **Save**: Save the resulting JSON file to `.claude/ccmem/json/{original_filename}.json`.
+6. **Save**: Save the resulting JSON file to `.claude/team-insight/json/{original_filename}.json`.
 
 ## Guidelines for Python
 
