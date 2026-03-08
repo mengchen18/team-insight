@@ -11,4 +11,4 @@ __pycache__/
 .claude/
 
 # Ignore local config if it contains secrets
-setting.json
+# setting.json
