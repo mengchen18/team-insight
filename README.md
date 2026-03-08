@@ -70,6 +70,19 @@ Team-Insight implements a highly optimized **Hybrid Search Pipeline** to ensure 
 4. **Maximal Marginal Relevance (MMR)**: Before returning results to Claude, it uses MMR to brutally filter out near-duplicate chunks, ensuring maximum *diversity* in the provided context window.
 5. **Metadata Filtering**: Searches can be strictly filtered by `file_type` (e.g., only Python files) or by `author`, making targeted queries extremely precise.
 
+## Smart Ingestion & Sync Logic
+
+To prevent explosive token costs and API delays on large codebases or binary files (like lengthy `.pptx` decks), Team-Insight relies on a two-tier deduplication architecture:
+
+1. **File-Level Skip (File to JSON)**: During the `/team-insight ingest` step, the pipeline checks the `last_modified` metadata of the raw file against the previously generated JSON memory. If the source file hasn't been touched, Claude bypasses the file entirely—preventing wasted tokens.
+2. **Chunk-Level Hash Sync (JSON to LanceDB)**: When the Python `embed` script processes the JSON files to sync with LanceDB, it doesn't blindly re-embed the whole file. Instead, it computes a SHA-256 hash of *every single individual chunk* (e.g., a specific Python function, a PPT slide, or a Markdown heading). 
+   - **Perfect matches** are instantly skipped.
+   - **Modified chunks** are uniquely embedded.
+   - **New chunks** are appended.
+   - **Deleted chunks** (orphans) are dynamically garbage-collected from the LanceDB index.
+
+This allows you to safely run the ingestion and embedding commands as often as you like; the system will only ever process the exact mathematical delta.
+
 ## Setup
 
 ### 1. Build the SIF container
